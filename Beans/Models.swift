@@ -78,6 +78,21 @@ struct Song: Identifiable, Hashable, Codable {
         }
     }
 
+    /// 列表小尺寸封面：网易云封面支持 ?param=WxH 缩略参数，
+    /// 46pt 的行不必加载 300~640px 原图（流量与解码开销都省下来）。
+    /// 播放器大封面等仍用 coverURL 原图。
+    var thumbnailURL: URL? {
+        guard let coverURL, source == .netease else { return coverURL }
+        if var comps = URLComponents(url: coverURL, resolvingAgainstBaseURL: false) {
+            var items = comps.queryItems ?? []
+            items.removeAll { $0.name == "param" }
+            items.append(URLQueryItem(name: "param", value: "120y120"))
+            comps.queryItems = items
+            return comps.url
+        }
+        return coverURL
+    }
+
     /// 是否为 VIP / 付费歌曲（用于列表与播放器角标）
     /// 网易云 fee：0 免费、1 VIP、4 付费单曲；8 为翻唱/免费资源，不视为 VIP
     /// QQ payplay：0 免费，非 0 需要会员/付费

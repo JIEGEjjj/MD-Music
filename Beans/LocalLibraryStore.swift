@@ -73,9 +73,18 @@ final class LocalLibraryStore: ObservableObject {
         playlists[idx].songs.removeAll { $0.identityKey == songIdentity }
     }
 
+    private var saveTask: Task<Void, Never>?
+
+    /// 防抖 + 后台编码：歌单越大，每次增删一首歌的全量 JSON 编码越贵。
+    /// 500ms 内的连续改动合并为一次写，编码移出主线程。
     private func save() {
-        if let data = try? JSONEncoder().encode(playlists) {
-            defaults.set(data, forKey: key)
+        saveTask?.cancel()
+        saveTask = Task { [playlists, defaults, key] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            if let data = try? JSONEncoder().encode(playlists) {
+                defaults.set(data, forKey: key)
+            }
         }
     }
 }

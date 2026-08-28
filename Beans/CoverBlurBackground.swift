@@ -39,8 +39,13 @@ final class CoverBlurView: UIView {
     private let gradientHost = UIView()
     private let tintView = UIView()
     private var currentURL: URL?
-    private static let imageCache = NSCache<NSURL, UIImage>()
-    private static let blurQueue = DispatchQueue(label: "beans.coverblur", qos: .utility)
+    private static let imageCache: NSCache<NSURL, UIImage> = {
+        let cache = NSCache<NSURL, UIImage>()
+        // 480×480 模糊图每张约 0.9MB，无上限会随听歌无限累积；12 张足够"来回切歌"场景
+        cache.countLimit = 12
+        cache.totalCostLimit = 24 * 1024 * 1024
+        return cache
+    }()
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     override init(frame: CGRect) {
@@ -135,21 +140,20 @@ final class CoverBlurView: UIView {
             return
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let self, let data, let source = UIImage(data: data) else { return }
-            Self.blurQueue.async {
-                let blurred = Self.makeBlurredImage(source)
-                let colors = Self.extractGradientColors(from: source)
-                if let blurred {
-                    Self.imageCache.setObject(blurred, forKey: url as NSURL)
-                }
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, self.currentURL == url else { return }
-                    if let blurred { self.setImage(blurred, animated: true) }
-                    self.applyGradient(colors)
-                }
+        // 走共享封面加载器：与列表封面/锁屏 artwork 共享下载与解码结果，同一封面不再多处重复请求
+        Task { [weak self] in
+            guard let source = await CoverLoader.shared.image(for: url) else { return }
+            let blurred = Self.makeBlurredImage(source)
+            let colors = Self.extractGradientColors(from: source)
+            if let blurred {
+                Self.imageCache.setObject(blurred, forKey: url as NSURL, cost: Int(blurred.size.width * blurred.size.height * 4))
             }
-        }.resume()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.currentURL == url else { return }
+                if let blurred { self.setImage(blurred, animated: true) }
+                self.applyGradient(colors)
+            }
+        }
     }
 
     /// 应用封面主色渐变（带过渡动画）

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreImage.CIFilterBuiltins
 
 // MARK: - 工具
@@ -317,39 +318,47 @@ struct CoverImage: View {
     /// 封面未加载时的提示文字（播放器大封面用：等待开始播放）；nil 显示中性图标
     var emptyHint: String? = nil
 
-    // 布局尺寸完全由外层固定容器决定；AsyncImage 只放在 overlay 中渲染，
-    // 图片加载完成与否都不会改变任何布局尺寸（根治"封面加载后错乱"）。
+    @State private var loadedImage: UIImage?
+    @State private var loadFailed = false
+
+    // 布局尺寸完全由外层固定容器决定；图片只放在 overlay 中渲染，
+    // 加载完成与否都不会改变任何布局尺寸（根治"封面加载后错乱"）。
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(Color.beansGlassFill)
             .frame(width: size, height: size)
             .overlay {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
+                ZStack {
+                    if let loadedImage {
+                        Image(uiImage: loadedImage)
+                            .resizable().scaledToFill()
                             .frame(width: size, height: size)
                             .clipped()
-                    case .failure:
+                    } else if url == nil || loadFailed {
+                        // 封面地址为空或加载失败：直接显示占位图标，避免一直转圈
                         placeholderIcon
-                    case .empty:
-                        if url == nil {
-                            // 封面地址为空时：直接显示占位图标，避免一直转圈
+                    } else {
+                        ZStack {
                             placeholderIcon
-                        } else {
-                            ZStack {
-                                placeholderIcon
-                                ProgressView().tint(Color.beansAmber)
-                            }
+                            ProgressView().tint(Color.beansAmber)
                         }
-                    @unknown default:
-                        placeholderIcon
                     }
                 }
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            // 走共享缓存加载器：列表滚动回滚不再重复下载/解码（.task(id:) 随视图复用自动取消过期请求）
+            .task(id: url) {
+                loadedImage = nil
+                loadFailed = false
+                guard let url else { return }
+                if let image = await CoverLoader.shared.image(for: url) {
+                    loadedImage = image
+                } else {
+                    loadFailed = true
+                }
+            }
     }
 
     private var placeholderIcon: some View {

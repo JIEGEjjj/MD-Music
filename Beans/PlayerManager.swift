@@ -84,6 +84,8 @@ final class PlayerManager: NSObject, ObservableObject {
     private var sleepTimer: Timer?
     private var lastCountedSongID: String?
     private var wasPlayingBeforeInterruption = false
+    /// 当前已设置锁屏封面的 URL（同曲去重，避免每次 seek/暂停都重新下载封面）
+    private var nowPlayingArtworkURL: URL?
 
     private let historyKey = "beans.history"
     private let countsKey = "beans.playcounts"
@@ -214,15 +216,28 @@ final class PlayerManager: NSObject, ObservableObject {
 
     func removeFromQueue(at index: Int) {
         guard queue.indices.contains(index), queue.count > 1 else { return }
-        let removedID = queue[index].id
-        queue.remove(at: index)
+        let wasCurrent = (index == currentIndex)
         if index < currentIndex {
             currentIndex -= 1
-        } else if index == currentIndex {
-            currentIndex = min(currentIndex, queue.count - 1)
+        }
+        switch playMode {
+        case .shuffle:
+            // 从既有随机顺序里摘掉被删位置，并把其后所有位置前移一位。
+            // 旧实现把"歌曲 id"当数组下标过滤（removedID == queue[index].id），
+            // 几乎总是删错位置或什么都没删，且 playOrder 长度与队列不再一致。
+            playOrder = playOrder
+                .filter { $0 != index }
+                .map { $0 > index ? $0 - 1 : $0 }
+            if orderPosition >= playOrder.count { orderPosition = playOrder.count - 1 }
+            if orderPosition < 0 { orderPosition = 0 }
+        default:
+            buildPlayOrder()
+        }
+        queue.remove(at: index)
+        currentIndex = min(currentIndex, queue.count - 1)
+        if wasCurrent {
             loadCurrent()
         }
-        buildPlayOrder(avoiding: removedID)
     }
 
     func retryCurrent() {
@@ -299,12 +314,13 @@ final class PlayerManager: NSObject, ObservableObject {
 
     // MARK: - 播放顺序
 
-    private func buildPlayOrder(avoiding removedID: Int? = nil) {
+    private func buildPlayOrder() {
         switch playMode {
         case .shuffle:
-            var indices = Array(queue.indices).filter { $0 != removedID }
-            indices.shuffle()
-            playOrder = indices
+            let indices = Array(queue.indices)
+            var shuffled = indices
+            shuffled.shuffle()
+            playOrder = shuffled
             orderPosition = 0
         default:
             playOrder = Array(queue.indices)
@@ -625,7 +641,9 @@ final class PlayerManager: NSObject, ObservableObject {
             bumpPlayCount(song)
             lastCountedSongID = song.identityKey
         }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] time in
+        // 0.25s 回调对 UI 精度足够；0.1s 会让 MiniPlayer + 歌词区每秒整体重绘 10 次，
+        // 属于持续 CPU/发热来源（暂停时回调频率自动降低，AVPlayer 行为）
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] time in
             guard let self, let player = self.player else { return }
             if time.seconds.isFinite {
                 self.progress = time.seconds
@@ -856,12 +874,15 @@ final class PlayerManager: NSObject, ObservableObject {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? rate : 0.0,
         ]
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        if let artworkURL = song.coverURL {
+        // 同一首歌只在首次设置锁屏封面；此前每次 seek/暂停/恢复都会用 Data(contentsOf:)
+        // 重新下载一次封面（无超时、绕过缓存），快速拖动进度条会堆积大量并发请求。
+        if let artworkURL = song.coverURL, nowPlayingArtworkURL != artworkURL {
             Task {
-                if let data = try? Data(contentsOf: artworkURL), let image = UIImage(data: data) {
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                    updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+                guard let image = await CoverLoader.shared.image(for: artworkURL) else { return }
+                nowPlayingArtworkURL = artworkURL
+                var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
                 }
             }
         }

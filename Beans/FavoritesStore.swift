@@ -99,9 +99,17 @@ final class FavoritesStore: ObservableObject {
         return saved
     }
 
+    private var saveTask: Task<Void, Never>?
+
+    /// 防抖 + 后台编码：收藏列表可能上千首，避免每次变动都全量同步编码阻塞主线程
     private func saveSongs(_ songs: [Song], key: String) {
-        if let data = try? JSONEncoder().encode(songs) {
-            defaults.set(data, forKey: key)
+        saveTask?.cancel()
+        saveTask = Task { [songs, defaults, key] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            if let data = try? JSONEncoder().encode(songs) {
+                defaults.set(data, forKey: key)
+            }
         }
     }
 

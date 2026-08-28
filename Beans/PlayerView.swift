@@ -1413,15 +1413,11 @@ struct PlayerView: View {
     /// 一次性提取当前封面主色，带动整个播放器配色动态变化（失败时保持主题回退色，不影响任何功能）
     private func extractCoverPalette() async {
         guard let url = song?.coverURL else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = UIImage(data: data),
-                  let dominant = PaletteExtractor.dominantColor(in: image) else { return }
-            withAnimation(.easeInOut(duration: 0.45)) {
-                dominantColor = dominant
-            }
-        } catch {
-            // 提取失败：静默保持回退色
+        // 走共享封面加载器：与列表/锁屏/模糊背景共享同一份解码结果，不再单独下载
+        guard let image = await CoverLoader.shared.image(for: url),
+              let dominant = PaletteExtractor.dominantColor(in: image) else { return }
+        withAnimation(.easeInOut(duration: 0.45)) {
+            dominantColor = dominant
         }
     }
 
