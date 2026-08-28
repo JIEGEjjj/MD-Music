@@ -7,6 +7,7 @@ struct BeansApp: App {
     @StateObject private var player = PlayerManager()
     @StateObject private var theme = ThemeStore.shared
     @StateObject private var favorites = FavoritesStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     /// 免责声明确认状态：未确认前主界面在模糊层下方可见，确认后移除门禁
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
 
@@ -31,6 +32,12 @@ struct BeansApp: App {
                 if !disclaimerAccepted {
                     OnboardingView { disclaimerAccepted = true }
                 }
+            }
+            // 退后台时立即落盘防抖中的数据：上滑杀掉 App 时 500ms 防抖窗口内的改动不丢失
+            .onChange(of: scenePhase) { phase in
+                guard phase == .background else { return }
+                FavoritesStore.shared.flushPendingSaves()
+                LocalLibraryStore.shared.flushPendingSaves()
             }
         }
     }

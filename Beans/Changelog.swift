@@ -33,9 +33,9 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
-            id: "1.1.0",
-            version: "1.1.0",
-            title: "性能优化与播放修复",
+            id: "1.2.0",
+            version: "1.2.0",
+            title: "主页加载修复与启动提速",
             features: [
                 "新增全局共享封面缓存：列表、锁屏、播放页背景共用一份封面，切歌更快、更省流量",
                 "歌曲列表小封面改用 120×120 缩略图，滚动更流畅",

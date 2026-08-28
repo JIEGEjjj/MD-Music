@@ -99,17 +99,32 @@ final class FavoritesStore: ObservableObject {
         return saved
     }
 
-    private var saveTask: Task<Void, Never>?
+    /// 按 key 独立防抖：网易云与 QQ 各自一个任务，避免互相取消导致待写数据丢失
+    private var saveTasks: [String: Task<Void, Never>] = [:]
 
     /// 防抖 + 后台编码：收藏列表可能上千首，避免每次变动都全量同步编码阻塞主线程
     private func saveSongs(_ songs: [Song], key: String) {
-        saveTask?.cancel()
-        saveTask = Task { [songs, defaults, key] in
+        saveTasks[key]?.cancel()
+        saveTasks[key] = Task { [songs, defaults, key] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
             if let data = try? JSONEncoder().encode(songs) {
                 defaults.set(data, forKey: key)
             }
+        }
+    }
+
+    /// 退后台/终止前调用：立即把待写数据落盘，防抖窗口内的改动不丢失
+    func flushPendingSaves() {
+        for (_, task) in saveTasks { task.cancel() }
+        saveTasks.removeAll()
+        saveSongsImmediate(neteaseFavoriteSongs, key: neteaseKey)
+        saveSongsImmediate(qqFavoriteSongs, key: qqKey)
+    }
+
+    private func saveSongsImmediate(_ songs: [Song], key: String) {
+        if let data = try? JSONEncoder().encode(songs) {
+            defaults.set(data, forKey: key)
         }
     }
 

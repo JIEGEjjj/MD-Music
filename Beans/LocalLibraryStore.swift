@@ -87,4 +87,13 @@ final class LocalLibraryStore: ObservableObject {
             }
         }
     }
+
+    /// 退后台/终止前调用：立即把待写数据落盘，防抖窗口内的改动不丢失
+    func flushPendingSaves() {
+        saveTask?.cancel()
+        saveTask = nil
+        if let data = try? JSONEncoder().encode(playlists) {
+            defaults.set(data, forKey: key)
+        }
+    }
 }

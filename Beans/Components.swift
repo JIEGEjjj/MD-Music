@@ -350,8 +350,10 @@ struct CoverImage: View {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             // 走共享缓存加载器：列表滚动回滚不再重复下载/解码（.task(id:) 随视图复用自动取消过期请求）
             .task(id: url) {
-                loadedImage = nil
-                loadFailed = false
+                // 命中内存缓存时先同步播种，复用单元格不再闪一帧占位图
+                if loadedImage == nil, let url, let cached = CoverLoader.shared.cachedImage(for: url) {
+                    loadedImage = cached
+                }
                 guard let url else { return }
                 if let image = await CoverLoader.shared.image(for: url) {
                     loadedImage = image

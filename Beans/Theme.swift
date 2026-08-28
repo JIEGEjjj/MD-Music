@@ -292,7 +292,10 @@ final class ThemeStore: ObservableObject {
             wallpaperPaths.insert(backgroundImagePath, at: 0)
             saveWallpaperList()
         }
-        UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
+        // base64 壁纸备份可能数 MB，内容没变就不回写，避免每次启动都做一次大字符串同步写
+        if UserDefaults.standard.object(forKey: wallpaperDataKey) as? [String: String] != backup {
+            UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
+        }
         invalidateBackgroundCache()
     }
 

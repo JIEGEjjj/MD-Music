@@ -228,7 +228,8 @@ final class PlayerManager: NSObject, ObservableObject {
             playOrder = playOrder
                 .filter { $0 != index }
                 .map { $0 > index ? $0 - 1 : $0 }
-            if orderPosition >= playOrder.count { orderPosition = playOrder.count - 1 }
+            // 删除导致位置前移，重新对齐到当前歌在新顺序中的位置，避免 advance() 把当前歌再播一遍
+            orderPosition = playOrder.firstIndex(of: currentIndex) ?? min(orderPosition, playOrder.count - 1)
             if orderPosition < 0 { orderPosition = 0 }
         default:
             buildPlayOrder()
@@ -879,6 +880,8 @@ final class PlayerManager: NSObject, ObservableObject {
         if let artworkURL = song.coverURL, nowPlayingArtworkURL != artworkURL {
             Task {
                 guard let image = await CoverLoader.shared.image(for: artworkURL) else { return }
+                // 快速连切歌时旧请求可能后返回：落地前校验封面仍是当前歌的，避免串图
+                guard currentSong?.coverURL == artworkURL else { return }
                 nowPlayingArtworkURL = artworkURL
                 var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                 updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }

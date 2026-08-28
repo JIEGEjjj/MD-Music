@@ -12,6 +12,7 @@ struct DiscoverView: View {
 
     @State private var loading = true
     @State private var errorMessage: String?
+    @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
     @State private var selectedTopList: TopList?
     @State private var selectedPlaylist: Playlist?
     @State private var showDailyList = false
@@ -91,7 +92,11 @@ struct DiscoverView: View {
             }
             .beansScrollIndicatorsHidden()
             .refreshable { await load(force: true) }
-            .task(id: source) { await load(force: false) }
+            .task(id: source) {
+                // 免责声明确认前不发起任何网络请求（引导页覆盖在上方时拉数据纯属浪费）
+                guard disclaimerAccepted else { return }
+                await load(force: false)
+            }
             .onAppear {
                 guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
                     homeSourceRaw = (homeProviders.first ?? .netease).rawValue
@@ -393,7 +398,7 @@ struct DiscoverView: View {
                     .font(BeansFont.appFont(16, .bold, .rounded))
                     .foregroundStyle(index < 3 ? Color.beansAmber : Color.beansComment)
                     .frame(width: 24)
-                CoverImage(url: coverURL, size: 52, cornerRadius: 12)
+                CoverImage(url: discoverCoverURL(coverURL, size: 52), size: 52, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(BeansFont.appFont(15, .semibold))
@@ -446,7 +451,7 @@ struct DiscoverView: View {
                             player.play(songs: dailySongs, startAt: index)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                CoverImage(url: song.coverURL, size: 108, cornerRadius: 16)
+                                CoverImage(url: discoverCoverURL(song.coverURL, size: 108), size: 108, cornerRadius: 16)
                                     .overlay(alignment: .topLeading) {
                                         if song.isVIP {
                                             Text("VIP")
@@ -534,7 +539,7 @@ struct DiscoverView: View {
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            CoverImage(url: playlist.coverURL, size: 144, cornerRadius: 18)
+                            CoverImage(url: discoverCoverURL(playlist.coverURL, size: 144), size: 144, cornerRadius: 18)
                                 .frame(maxWidth: .infinity)
                             Text(playlist.name)
                                 .font(BeansFont.appFont(12, .medium))
@@ -594,7 +599,10 @@ struct DiscoverView: View {
             if cache.isFresh(cached) { return }
             // 缓存过期：先用缓存展示，后台静默刷新
         } else {
-            loading = true
+            // 已有内容时刷新不摆转圈（静默刷新），避免下拉/切页把整页闪成加载态
+            if !hasAnyData {
+                loading = true
+            }
             errorMessage = nil
         }
 
@@ -631,15 +639,20 @@ struct DiscoverView: View {
     private func fetchSnapshot(for source: SearchProvider) async throws -> DiscoverCache.Snapshot {
         var snapshot = DiscoverCache.Snapshot()
         snapshot.savedAt = Date()
+        // 各接口独立降级：第三方接口本就不稳，任一失败不再拖垮整页（此前是全有或全无，
+        // 单个次要接口报错就丢弃全部数据，是"主页刷不出来"的主要根因）。
+        // 只有全部板块都拿不到数据才算真正失败，交给错误页重试。
         switch source {
         case .qq:
             async let a = QQMusicAPI.shared.recommendSongs(limit: 30)
             async let b = QQMusicAPI.shared.topLists()
             async let c = QQMusicAPI.shared.recommendPlaylists(limit: 12)
-            let (dr, tl, pp) = try await (a, b, c)
-            snapshot.dailySongs = dr
-            snapshot.qqTopLists = tl
-            snapshot.personalized = pp
+            let dr = try? await a
+            let tl = try? await b
+            let pp = try? await c
+            snapshot.dailySongs = dr ?? []
+            snapshot.qqTopLists = tl ?? []
+            snapshot.personalized = pp ?? []
         case .netease:
             async let a = NetEaseAPI.shared.topLists()
             async let b = NetEaseAPI.shared.dailyRecommend()
@@ -648,19 +661,27 @@ struct DiscoverView: View {
                 ? NetEaseAPI.shared.highQualityPlaylists(limit: 18)
                 : NetEaseAPI.shared.playlistSquare(cat: neteaseCat, order: "hot", limit: 18)
             async let d = NetEaseAPI.shared.playlistCatlist()
-            let (tl, dr, pp, cats) = try await (a, b, c, d)
-            snapshot.topLists = tl
-            snapshot.dailySongs = dr
-            snapshot.personalized = pp
+            let tl = try? await a
+            let dr = try? await b
+            let pp = try? await c
+            let cats = await d
+            snapshot.topLists = tl ?? []
+            snapshot.dailySongs = dr ?? []
+            snapshot.personalized = pp ?? []
             if !cats.isEmpty { playlistCats = cats }
         case .kugou:
             async let songs = KugouMusicAPI.shared.searchSongs(keyword: "热门歌曲", limit: 30)
             async let ranks = KugouMusicAPI.shared.topLists(limit: 10)
             async let playlists = KugouMusicAPI.shared.recommendPlaylists(limit: 12)
-            let (daily, top, pp) = try await (songs, ranks, playlists)
-            snapshot.dailySongs = daily
-            snapshot.kugouTopLists = top
-            snapshot.personalized = pp
+            let daily = try? await songs
+            let top = try? await ranks
+            let pp = try? await playlists
+            snapshot.dailySongs = daily ?? []
+            snapshot.kugouTopLists = top ?? []
+            snapshot.personalized = pp ?? []
+        }
+        if snapshot.isEmpty {
+            throw DiscoverLoadError.allSourcesFailed
         }
         return snapshot
     }
@@ -1157,4 +1178,28 @@ struct KugouTopListDetailView: View {
             loading = false
         }
     }
+}
+
+/// 发现页专用加载错误：所有板块都失败时抛出（部分失败已在 fetchSnapshot 内降级）
+private enum DiscoverLoadError: LocalizedError {
+    case allSourcesFailed
+
+    var errorDescription: String? {
+        "内容加载失败，请检查网络后下拉重试"
+    }
+}
+
+/// 小/中尺寸封面缩略图：网易云支持 ?param=宽x高，其他平台返回原图
+func discoverCoverURL(_ url: URL?, size: CGFloat) -> URL? {
+    guard let url else { return nil }
+    guard url.host?.contains("music.126.net") == true else { return url }
+    let side = size <= 60 ? 120 : 300
+    if var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+        var items = comps.queryItems ?? []
+        items.removeAll { $0.name == "param" }
+        items.append(URLQueryItem(name: "param", value: "\(side)y\(side)"))
+        comps.queryItems = items
+        return comps.url
+    }
+    return url
 }
