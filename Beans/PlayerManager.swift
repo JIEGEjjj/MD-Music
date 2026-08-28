@@ -886,7 +886,6 @@ final class PlayerManager: NSObject, ObservableObject {
             }
         }
     }
-    }
 
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
