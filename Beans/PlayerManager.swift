@@ -883,9 +883,9 @@ final class PlayerManager: NSObject, ObservableObject {
                 var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                 updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-                }
             }
         }
+    }
     }
 
     private func setupRemoteCommands() {
