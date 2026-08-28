@@ -424,7 +424,7 @@ struct PlayerView: View {
                     .font(BeansFont.appFont(12, .semibold))
                     .foregroundStyle(palette.secondary)
                     .lineLimit(1)
-                Text(song?.album ?? "Beans Music")
+                Text(song?.album ?? "MD Music")
                     .font(BeansFont.appFont(10))
                     .foregroundStyle(palette.secondary.opacity(0.85))
                     .lineLimit(1)
