@@ -3,12 +3,12 @@
 > 一款基于 **iOS 26 原生液态玻璃（Liquid Glass）** 的第三方音乐播放器（兼容 iOS 16+，低版本自动回退磨砂玻璃），聚合网易云音乐与 QQ 音乐，纯 SwiftUI 实现。
 > 本软件完全开源，仅供学习研究使用。
 
-[![GitHub Pages 预览](https://img.shields.io/badge/在线预览-GitHub%20Pages-blue)](https://JIEGEjjj.github.io/Beans-Music/)
+[![GitHub Pages 预览](https://img.shields.io/badge/在线预览-GitHub%20Pages-blue)](https://JIEGEjjj.github.io/MD-Music/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-iOS%2016+-orange)]()
 [![Swift](https://img.shields.io/badge/Swift-5-orange)]()
 
-**👀 在线预览（HTML 介绍页）：** https://JIEGEjjj.github.io/Beans-Music/
+**👀 在线预览（HTML 介绍页）：** https://JIEGEjjj.github.io/MD-Music/
 
 ## 🧑‍💻 关于作者
 
@@ -140,7 +140,7 @@ Beans/
 
 ## 🔨 构建
 
-GitHub Actions（`Build Unsigned IPA`）自动构建，产物发布到 [Releases](https://github.com/JIEGEjjj/Beans-Music/releases)。
+GitHub Actions（`Build Unsigned IPA`）自动构建，产物发布到 [Releases](https://github.com/JIEGEjjj/MD-Music/releases)。
 
 本地构建（需要 Mac + Xcode 26）：
 

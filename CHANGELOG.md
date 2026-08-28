@@ -1,4 +1,15 @@
-# Beans Music 更新日志
+# MD Music 更新日志
+
+## 1.0.0
+
+### MD Music 首个版本
+
+- 基于 Beans Music 1.5.4 定制：聚合网易云音乐 / QQ 音乐 / 酷狗，纯 SwiftUI。
+- 自定义应用图标与欢迎页 Logo。
+- 同步上游 LX 脚本音源支持（JavaScriptCore 运行时）。
+- 包含长歌名布局修复、歌手主页分页加载、酷狗加载风暴修复等上游 1.5.4 全部改进。
+- 修复上游 ProfileView / SettingsView 缺失定义与 UnblockSourceStore 初始化顺序两处编译错误。
+- 更新检测指向本仓库（JIEGEjjj/MD-Music），App 内更新直接下载自建版本。
 
 ## 1.5.4
 
