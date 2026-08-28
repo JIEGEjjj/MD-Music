@@ -56,7 +56,7 @@ final class CoverLoader {
         } else {
             task = Task<UIImage?, Never> { [session, cache] in
                 guard let (data, response) = try? await session.data(from: url) else { return nil }
-                guard let image = decodeImage(from: data) else { return nil }
+                guard let image = Self.decodeImage(from: data) else { return nil }
                 if (200..<300).contains((response as? HTTPURLResponse)?.statusCode ?? 200) {
                     cache.setObject(image, forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
                 }

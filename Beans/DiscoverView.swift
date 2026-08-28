@@ -12,7 +12,6 @@ struct DiscoverView: View {
 
     @State private var loading = true
     @State private var errorMessage: String?
-    @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
     @State private var selectedTopList: TopList?
     @State private var selectedPlaylist: Playlist?
     @State private var showDailyList = false
