@@ -51,6 +51,28 @@ struct ThirdPartySource: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// 用户导入的 LX 脚本音源（LX Music 兼容自定义源脚本）
+struct LxScriptSource: Identifiable, Codable, Hashable, Sendable {
+    var id = UUID().uuidString
+    var name: String
+    var script: String
+
+    enum CodingKeys: String, CodingKey { case id, name, script }
+
+    init(id: String = UUID().uuidString, name: String, script: String) {
+        self.id = id
+        self.name = name
+        self.script = script
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "未命名 LX 音源"
+        script = try container.decodeIfPresent(String.self, forKey: .script) ?? ""
+    }
+}
+
 /// 内置音源管理：首次启动时写入三种插件格式对应的预设。
 final class UnblockSourceStore: ObservableObject {
     static let shared = UnblockSourceStore()
@@ -111,8 +133,14 @@ final class UnblockSourceStore: ObservableObject {
         didSet { save() }
     }
 
+    /// 用户导入的 LX 脚本音源（作为解析链最后一级兜底）
+    @Published var lxScripts: [LxScriptSource] = [] {
+        didSet { saveLxScripts() }
+    }
+
     private let defaults = UserDefaults.standard
     private let presetsKey = "beans.unblock.presets"
+    private let lxScriptsKey = "beans.unblock.lxscripts.v2"
     private let legacyCustomKey = "beans.unblock.custom"
     private let legacyLXKey = "beans.unblock.lxScripts"
 
@@ -132,8 +160,51 @@ final class UnblockSourceStore: ObservableObject {
         let existingPresets = savedSources.filter { $0.isPreset }
         presetSources = Self.seedPaidPresets(into: existingPresets)
         defaults.removeObject(forKey: legacyCustomKey)
-        defaults.removeObject(forKey: legacyLXKey)
+        migrateLegacyLxScripts()
         save()
+    }
+
+    /// 上游 1.5.5 移除 LX 时直接清掉了用户脚本数据；MD 恢复该功能，
+    /// 从旧键把脚本迁移回来（1.3.x 前升级且未启动过上游版的用户可无损找回）。
+    private func migrateLegacyLxScripts() {
+        if let data = defaults.data(forKey: lxScriptsKey),
+           let list = try? JSONDecoder().decode([LxScriptSource].self, from: data),
+           !list.isEmpty {
+            lxScripts = list
+            return
+        }
+        if let data = defaults.data(forKey: legacyLXKey),
+           let list = try? JSONDecoder().decode([LxScriptSource].self, from: data),
+           !list.isEmpty {
+            lxScripts = list
+            saveLxScripts()
+        }
+    }
+
+    private func saveLxScripts() {
+        if let data = try? JSONEncoder().encode(lxScripts) {
+            defaults.set(data, forKey: lxScriptsKey)
+        }
+    }
+
+    /// 用户导入的自定义源：进入统一源列表，可在设置页开关
+    func add(_ source: ThirdPartySource) {
+        var updated = source
+        if let index = presetSources.firstIndex(where: { $0.id == source.id }) {
+            presetSources[index] = updated
+        } else {
+            updated.isPreset = false
+            presetSources.insert(updated, at: 0)
+        }
+    }
+
+    func addLxScript(_ source: LxScriptSource) {
+        lxScripts.removeAll { $0.name == source.name }
+        lxScripts.append(source)
+    }
+
+    func removeLxScript(_ source: LxScriptSource) {
+        lxScripts.removeAll { $0.id == source.id }
     }
 
     private func save() {

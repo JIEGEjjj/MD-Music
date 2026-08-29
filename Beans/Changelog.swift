@@ -33,6 +33,21 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.4.0",
+            version: "1.4.0",
+            title: "LX 脚本音源回归",
+            features: [
+                "移植回 LX 脚本音源：设置 → 内置音源预设 → 导入音源",
+                "支持粘贴 / 文件导入 LX JavaScript 脚本，本地运行不联网上传",
+                "解析链四级回退：收费源 → 免费兜底源 → 导入音源 → LX 脚本",
+                "老版本导入过的 LX 脚本数据自动迁移恢复",
+                "支持 iPhone 高刷新率与网页登录数据清理（随上游 1.5.5）",
+            ],
+            fixes: [
+                "保留 QQ / 网易云 VIP 免费兜底源与播放键重试修复（1.3.1）",
+            ]
+        ),
+        VersionLog(
             id: "1.3.1",
             version: "1.3.1",
             title: "修复 QQ / 酷狗 VIP 歌曲无法播放",

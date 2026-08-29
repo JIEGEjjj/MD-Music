@@ -41,7 +41,7 @@ enum UnblockService {
         let uniqueSources = sources.filter { seen.insert(requestFingerprint(for: $0)).inserted }
 
         // 慢源/失效源不要拖住播放：全部候选一起请求，最快命中的播放地址直接返回。
-        return await withTaskGroup(of: Resolved?.self) { group in
+        let presetResult = await withTaskGroup(of: Resolved?.self) { group in
             for source in uniqueSources {
                 group.addTask {
                     return await presetSourceRequest(
@@ -63,6 +63,27 @@ enum UnblockService {
             }
             return nil
         }
+        if let presetResult { return presetResult }
+
+        // 最后一级兜底：用户导入的 LX 脚本音源（顺序尝试，避免脚本请求风暴）
+        let lxScripts = UnblockSourceStore.shared.lxScripts
+            .filter { !$0.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        for source in lxScripts {
+            let url = await LxScriptRuntime.resolve(
+                source: source,
+                name: name,
+                artists: artists,
+                durationMS: 0,
+                neteaseID: neteaseID,
+                qqMid: qqMid,
+                kugouHash: kugouID
+            )
+            if let url {
+                BeansLogger.shared.log("导入 LX 音源命中：\(source.name)", level: .info)
+                return Resolved(url: url, source: source.name)
+            }
+        }
+        return nil
     }
 
     private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?, kugouID: String?) -> Bool {

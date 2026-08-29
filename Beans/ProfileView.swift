@@ -1002,6 +1002,7 @@ struct SettingsView: View {
     @AppStorage("beans.labelColorHex") private var labelColorHex = ""
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
     @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
+    @State private var showSourceImporter = false
 
     private var importedSourceCount: Int {
         sourceStore.presetSources.count
@@ -1101,6 +1102,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showLogViewer) {
             LogViewerSheet(importedText: nil)
+        }
+        .sheet(isPresented: $showSourceImporter) {
+            ThirdPartySourceImportSheet()
         }
         .fullScreenCover(isPresented: $showRestorePicker) {
             BackupDocumentPicker { url in
@@ -1726,7 +1730,7 @@ struct SettingsView: View {
                                 .font(BeansFont.appFont(13, .medium))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
-                            Text("内置预设 · \(source.kind.replacingOccurrences(of: "paid-", with: "").uppercased())")
+                            Text(source.isPreset ? "内置预设 · \(source.kind.replacingOccurrences(of: "paid-", with: "").uppercased())" : "导入音源 · \(source.kind)")
                                 .font(BeansFont.appFont(10))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1735,6 +1739,56 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(Color.beansAmber)
                     }
+                }
+
+                ForEach(sourceStore.lxScripts) { source in
+                    HStack(spacing: 10) {
+                        Image(systemName: "curlybraces.square.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28, height: 28)
+                            .background(Color.beansGlassFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.name)
+                                .font(BeansFont.appFont(13, .medium))
+                                .foregroundStyle(Color.beansLabel)
+                                .lineLimit(1)
+                            Text("LX JavaScript 音源 · 解析链最后一级兜底")
+                                .font(BeansFont.appFont(10))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Spacer()
+                        Button {
+                            sourceStore.removeLxScript(source)
+                            BeansHaptics.tap()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.red)
+                                .frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除 LX 音源")
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        BeansHaptics.tap()
+                        showSourceImporter = true
+                    } label: {
+                        Label("导入音源", systemImage: "square.and.arrow.down")
+                            .font(BeansFont.appFont(13, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Text("LX 脚本作为解析链最后一级兜底")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
                 }
 
             }
