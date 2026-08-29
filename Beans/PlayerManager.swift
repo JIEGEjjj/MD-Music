@@ -142,6 +142,10 @@ final class PlayerManager: NSObject, ObservableObject {
         if player.timeControlStatus == .playing {
             player.pause()
             isPlaying = false
+        } else if loadFailed {
+            // 当前歌加载失败时旧曲目还挂在播放器上，直接 play 会"界面是新歌、声音是上一首"。
+            // 此时改为重试加载当前歌。
+            retryCurrent()
         } else {
             player.playImmediately(atRate: Float(rate))
             isPlaying = true

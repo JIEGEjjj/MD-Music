@@ -33,6 +33,19 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.3.1",
+            version: "1.3.1",
+            title: "修复 QQ / 酷狗 VIP 歌曲无法播放",
+            features: [
+                "新增两个免费兜底音源（无配额限制）：收费源每日配额耗尽后自动接管 VIP 解析",
+                "兜底源覆盖 QQ 音乐与网易云音乐 VIP 歌曲",
+            ],
+            fixes: [
+                "修复共享解析源每日配额耗尽导致 VIP 歌曲全天无法播放的问题",
+                "修复加载失败后点击播放会播放上一首歌的问题，现在会自动重试当前歌曲",
+            ]
+        ),
+        VersionLog(
             id: "1.3.0",
             version: "1.3.0",
             title: "同步上游 1.5.5 与登录体验改进",

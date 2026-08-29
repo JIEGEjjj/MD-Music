@@ -86,6 +86,25 @@ final class UnblockSourceStore: ObservableObject {
             headers: ["apiKey": paidAPIKey, "quality": "320k"],
             isPreset: true
         ),
+        // 免费兜底源：聆澜 API 的共享 Key 每日仅 1000 次成功配额，全用户共用，
+        // 配额耗尽当天所有 VIP 解析都会失败（HTTP 200 + 错误 JSON，解析为空后自动轮到下一个源）。
+        // 以下两个源无配额限制，作为兜底保证 QQ / 网易云 VIP 歌曲全天可播。
+        ThirdPartySource(
+            id: "beans.preset.md.guoyue.qq.v1",
+            name: "MD 兜底 · QQ 稳定源",
+            kind: "template-api",
+            template: "https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&mid={id}",
+            headers: ["source": "tx"],
+            isPreset: true
+        ),
+        ThirdPartySource(
+            id: "beans.preset.md.guoyue.wy.v1",
+            name: "MD 兜底 · 网易云统一源",
+            kind: "template-api",
+            template: "https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id={id}&br=999",
+            headers: ["source": "wy"],
+            isPreset: true
+        ),
     ]
 
     @Published var presetSources: [ThirdPartySource] {
