@@ -1005,7 +1005,7 @@ struct SettingsView: View {
     @State private var showSourceImporter = false
 
     private var importedSourceCount: Int {
-        sourceStore.presetSources.count
+        sourceStore.customSources.count + sourceStore.lxScripts.count
     }
 
     @State private var appearanceExpanded = false
@@ -1031,10 +1031,6 @@ struct SettingsView: View {
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
-    }
-
-    private var presetSourceCount: Int {
-        sourceStore.presetSources.count
     }
 
     var body: some View {
@@ -1711,26 +1707,32 @@ struct SettingsView: View {
                 .tint(Color.beansAmber)
 
                 HStack(spacing: 10) {
-                    Image(systemName: "shippingbox.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.beansAmber)
-                    Text("内置音源预设")
-                        .font(BeansFont.appFont(13, .semibold))
-                        .foregroundStyle(Color.beansLabel)
+                    Button {
+                        BeansHaptics.tap()
+                        showSourceImporter = true
+                    } label: {
+                        Label("导入音源", systemImage: "square.and.arrow.down")
+                            .font(BeansFont.appFont(13, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                     Spacer()
-                    Text("\(presetSourceCount) 个")
+                    Text(importedSourceCount == 0 ? "尚未导入" : "\(importedSourceCount) 个")
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }
 
-                ForEach(sourceStore.presetSources) { source in
+                ForEach(sourceStore.customSources) { source in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(source.name)
                                 .font(BeansFont.appFont(13, .medium))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
-                            Text(source.isPreset ? "内置预设 · \(source.kind.replacingOccurrences(of: "paid-", with: "").uppercased())" : "导入音源 · \(source.kind)")
+                            Text(source.headers["source"]?.uppercased() ?? source.kind)
                                 .font(BeansFont.appFont(10))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1738,6 +1740,17 @@ struct SettingsView: View {
                         Toggle("", isOn: sourceEnabledBinding(source.id))
                             .labelsHidden()
                             .tint(Color.beansAmber)
+                        Button {
+                            sourceStore.remove(source)
+                            BeansHaptics.tap()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.red)
+                                .frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除音源")
                     }
                 }
 
@@ -1753,7 +1766,7 @@ struct SettingsView: View {
                                 .font(BeansFont.appFont(13, .medium))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
-                            Text("LX JavaScript 音源 · 解析链最后一级兜底")
+                            Text("LX JavaScript 音源")
                                 .font(BeansFont.appFont(10))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1777,7 +1790,7 @@ struct SettingsView: View {
                         BeansHaptics.tap()
                         showSourceImporter = true
                     } label: {
-                        Label("导入音源", systemImage: "square.and.arrow.down")
+                        Label("导入 LX 脚本", systemImage: "curlybraces.square")
                             .font(BeansFont.appFont(13, .semibold))
                             .foregroundStyle(Color.beansAmber)
                             .padding(.horizontal, 12)
@@ -1786,7 +1799,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     Spacer()
-                    Text("LX 脚本作为解析链最后一级兜底")
+                    Text("LX 脚本在官方与导入音源都未命中时兜底")
                         .font(BeansFont.appFont(11))
                         .foregroundStyle(Color.beansComment)
                 }
@@ -1804,10 +1817,10 @@ struct SettingsView: View {
 
     private func sourceEnabledBinding(_ id: String) -> Binding<Bool> {
         Binding(
-            get: { sourceStore.presetSources.first(where: { $0.id == id })?.enabled ?? false },
+            get: { sourceStore.customSources.first(where: { $0.id == id })?.enabled ?? false },
             set: { value in
-                guard let index = sourceStore.presetSources.firstIndex(where: { $0.id == id }) else { return }
-                sourceStore.presetSources[index].enabled = value
+                guard let index = sourceStore.customSources.firstIndex(where: { $0.id == id }) else { return }
+                sourceStore.customSources[index].enabled = value
             }
         )
     }

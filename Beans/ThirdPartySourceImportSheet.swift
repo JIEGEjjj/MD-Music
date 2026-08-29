@@ -155,7 +155,7 @@ struct ThirdPartySourceImportSheet: View {
         guard url.host?.lowercased() == "github.com" else { return nil }
         let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard path == "guoyue2010/lxmusic-" || path == "guoyue2010/lxmusic-.git" else { return nil }
-        return UnblockSourceStore.paidPresetSources
+        return UnblockSourceStore.guoyuePresetSources
     }
 
     /// 从文件导入：优先识别 LX JS，再回退到 JSON 配置解析。
