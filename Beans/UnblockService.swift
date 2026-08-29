@@ -41,7 +41,7 @@ enum UnblockService {
         let uniqueSources = sources.filter { seen.insert(requestFingerprint(for: $0)).inserted }
 
         // 慢源/失效源不要拖住播放：全部候选一起请求，最快命中的播放地址直接返回。
-        let presetResult = await withTaskGroup(of: Resolved?.self) { group in
+        let presetResult: Resolved? = await withTaskGroup(of: Resolved?.self) { group in
             for source in uniqueSources {
                 group.addTask {
                     return await presetSourceRequest(
