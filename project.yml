@@ -13,12 +13,10 @@ targets:
     type: application
     platform: iOS
     sources: [Beans]
-    frameworks:
-      - JavaScriptCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdmusic.app
-        MARKETING_VERSION: "1.2.0"
+        MARKETING_VERSION: "1.3.0"
         CURRENT_PROJECT_VERSION: "6"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_OBJC_BRIDGING_HEADER: Beans/Beans-Bridging-Header.h
@@ -29,6 +27,7 @@ targets:
         CFBundleDisplayName: MD Music
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CADisableMinimumFrameDurationOnPhone: true
         UIBackgroundModes: [audio]
         UILaunchScreen:
           UIImageName: LaunchBackground

@@ -84,8 +84,9 @@ final class PlayerManager: NSObject, ObservableObject {
     private var sleepTimer: Timer?
     private var lastCountedSongID: String?
     private var wasPlayingBeforeInterruption = false
-    /// 当前已设置锁屏封面的 URL（同曲去重，避免每次 seek/暂停都重新下载封面）
-    private var nowPlayingArtworkURL: URL?
+    private var lastPublishedProgress: Double = -1
+    private var lastNowPlayingArtworkKey: String?
+    private static let nowPlayingArtworkCache = NSCache<NSURL, UIImage>()
 
     private let historyKey = "beans.history"
     private let countsKey = "beans.playcounts"
@@ -449,7 +450,6 @@ final class PlayerManager: NSObject, ObservableObject {
             resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: song.id,
                 songSource: .netease,
                 strict: strict
@@ -467,7 +467,6 @@ final class PlayerManager: NSObject, ObservableObject {
             resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: 0,
                 songSource: .qq,
                 qqMid: song.qqMid,
@@ -489,7 +488,6 @@ final class PlayerManager: NSObject, ObservableObject {
                 resolved = await UnblockService.resolve(
                     name: matched.name,
                     artists: matched.artists,
-                    durationMS: Int(matched.duration * 1000),
                     neteaseID: matched.id,
                     songSource: .netease,
                     strict: strict
@@ -500,7 +498,7 @@ final class PlayerManager: NSObject, ObservableObject {
         return (urlString, resolved)
     }
 
-    /// 酷狗兜底：官方播放失败后使用导入音源作为备选，便于验证用户导入音源是否可用。
+    /// 酷狗兜底：官方播放失败后使用内置音源作为备选。
     private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
         guard enableUnblock else { return nil }
         let kugouID = song.kugouHash ?? song.kugouAlbumAudioId ?? ""
@@ -510,7 +508,6 @@ final class PlayerManager: NSObject, ObservableObject {
             let resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: 0,
                 songSource: .kugou,
                 kugouID: kugouID
@@ -531,7 +528,6 @@ final class PlayerManager: NSObject, ObservableObject {
             let resolved = await UnblockService.resolve(
                 name: matched.name,
                 artists: matched.artists,
-                durationMS: Int(matched.duration * 1000),
                 neteaseID: matched.id,
                 songSource: .netease,
                 strict: strict
@@ -642,12 +638,14 @@ final class PlayerManager: NSObject, ObservableObject {
             bumpPlayCount(song)
             lastCountedSongID = song.identityKey
         }
-        // 0.25s 回调对 UI 精度足够；0.1s 会让 MiniPlayer + 歌词区每秒整体重绘 10 次，
-        // 属于持续 CPU/发热来源（暂停时回调频率自动降低，AVPlayer 行为）
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] time in
+        // 0.2s 回调 + 0.18s 发布节流：UI 精度足够且避免每秒 10 次全量重绘（上游 1.5.5 同款方案）
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] time in
             guard let self, let player = self.player else { return }
             if time.seconds.isFinite {
-                self.progress = time.seconds
+                if abs(time.seconds - self.lastPublishedProgress) >= 0.18 {
+                    self.lastPublishedProgress = time.seconds
+                    self.progress = time.seconds
+                }
             }
             if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
                 let seconds = itemDuration.seconds
@@ -694,6 +692,7 @@ final class PlayerManager: NSObject, ObservableObject {
         timeControlStatusObserver = nil
         playbackConfirmed = false
         pendingThirdPartyVIPNotice = nil
+        lastPublishedProgress = -1
     }
 
     private func thirdPartyVIPNotice(for song: Song, sourceTitle: String) -> ThirdPartyVIPNotice? {
@@ -866,7 +865,7 @@ final class PlayerManager: NSObject, ObservableObject {
 
     private func updateNowPlaying() {
         guard let song = currentSong else { return }
-        let info: [String: Any] = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: song.name,
             MPMediaItemPropertyArtist: song.artists,
             MPMediaItemPropertyAlbumTitle: song.album,
@@ -874,20 +873,26 @@ final class PlayerManager: NSObject, ObservableObject {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: progress,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? rate : 0.0,
         ]
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        // 同一首歌只在首次设置锁屏封面；此前每次 seek/暂停/恢复都会用 Data(contentsOf:)
-        // 重新下载一次封面（无超时、绕过缓存），快速拖动进度条会堆积大量并发请求。
-        if let artworkURL = song.coverURL, nowPlayingArtworkURL != artworkURL {
-            Task {
-                guard let image = await CoverLoader.shared.image(for: artworkURL) else { return }
-                // 快速连切歌时旧请求可能后返回：落地前校验封面仍是当前歌的，避免串图
-                guard currentSong?.coverURL == artworkURL else { return }
-                nowPlayingArtworkURL = artworkURL
-                var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+        if let artworkURL = song.coverURL {
+            let artworkKey = song.identityKey + "|" + artworkURL.absoluteString
+            if let cached = Self.nowPlayingArtworkCache.object(forKey: artworkURL as NSURL) {
+                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: cached.size) { _ in cached }
+            } else if lastNowPlayingArtworkKey != artworkKey {
+                lastNowPlayingArtworkKey = artworkKey
+                Task {
+                    // 走共享封面加载器（带超时与磁盘缓存），并校验封面仍属于当前歌，避免快速切歌串图
+                    guard let image = await CoverLoader.shared.image(for: artworkURL) else { return }
+                    guard currentSong?.coverURL == artworkURL else { return }
+                    Self.nowPlayingArtworkCache.setObject(image, forKey: artworkURL as NSURL)
+                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                    updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+                }
             }
+        } else {
+            lastNowPlayingArtworkKey = nil
         }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func setupRemoteCommands() {

@@ -33,6 +33,22 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.3.0",
+            version: "1.3.0",
+            title: "同步上游 1.5.5 与登录体验改进",
+            features: [
+                "同步上游 1.5.5 全部改进（上游移除了 LX 脚本音源，本版本跟随移除）",
+                "播放器顶栏标题区可点击打开更多操作菜单",
+                "支持 iPhone 高刷新率声明（CADisableMinimumFrameDurationOnPhone）",
+                "新增网页登录数据清理器，登录状态更干净",
+                "随机播放、锁屏封面与播放进度刷新沿用本项目的优化实现",
+            ],
+            fixes: [
+                "包含上游 1.5.5 的各项修复与稳定性改进",
+                "保留封面共享缓存、缩略图、接口独立降级等全部既有优化",
+            ]
+        ),
+        VersionLog(
             id: "1.2.0",
             version: "1.2.0",
             title: "主页加载修复与启动提速",
