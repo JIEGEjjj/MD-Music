@@ -14,6 +14,7 @@ struct ProfileView: View {
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var player: PlayerManager
     @AppStorage("beans.themeMode") private var themeModeRaw = BeansThemeMode.system.rawValue
+    @AppStorage("beans.homeHeaderHideSort") private var homeHeaderHideSort = false
 
     @State private var showHistory = false
 
@@ -39,6 +40,7 @@ struct ProfileView: View {
     @State private var updateShareFile: ShareFileItem?
     @State private var updateShareFileURL: URL?
     @State private var didRefreshProfileAccount = false
+    @State private var donationExpanded = false
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
     @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
@@ -58,9 +60,9 @@ struct ProfileView: View {
         var parts: [String] = []
         if platformPrefs.isEnabled(SearchProvider.netease), auth.isLoggedIn {
             if let nick = auth.user?.nickname, !nick.isEmpty {
-                parts.append("网易云 \(nick)")
+                parts.append("网易云音乐 \(nick)")
             } else {
-                parts.append("网易云 UID \(auth.user?.uid ?? 0)")
+                parts.append("网易云音乐 UID \(auth.user?.uid ?? 0)")
             }
         }
         if platformPrefs.isEnabled(SearchProvider.qq), qqAuth.isLoggedIn {
@@ -92,9 +94,11 @@ struct ProfileView: View {
             }
             Spacer()
             HStack(spacing: 10) {
-                GlassIconButton(systemName: "arrow.up.arrow.down") {
-                    BeansHaptics.tap()
-                    showSectionSort = true
+                if !homeHeaderHideSort {
+                    GlassIconButton(systemName: "arrow.up.arrow.down") {
+                        BeansHaptics.tap()
+                        showSectionSort = true
+                    }
                 }
                 GlassIconButton(systemName: "gearshape.fill") {
                     BeansHaptics.tap()
@@ -129,10 +133,13 @@ struct ProfileView: View {
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
                     updateLinkCard
                     communityCard
+                    donationCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 190)
+                .frame(maxWidth: 860)
+                .frame(maxWidth: .infinity)
             }
             .beansScrollIndicatorsHidden()
         }
@@ -144,10 +151,16 @@ struct ProfileView: View {
                 await qqAuth.fetchVIPStatus()
             }
         }
+        .background {
+            HighRefreshConfigurator()
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+        }
         .sheet(isPresented: $showHistory) {
             HistoryView()
                 .environmentObject(player)
                 .environmentObject(auth)
+                .environmentObject(theme)
         }
         .sheet(isPresented: $showAccountHub) {
             AccountHubSheet()
@@ -160,7 +173,15 @@ struct ProfileView: View {
                 .environmentObject(player)
         }
         .sheet(isPresented: $showSectionSort) {
-            SectionOrderSheet(title: "我的板块排序", sections: SectionOrderStore.profileDefaults, order: $profileOrder)
+            SectionOrderSheet(
+                title: "我的板块排序",
+                sections: SectionOrderStore.profileDefaults,
+                order: $profileOrder,
+                platformOrder: Binding(
+                    get: { platformPrefs.orderedRaw },
+                    set: { platformPrefs.orderedRaw = $0 }
+                )
+            )
                 .onDisappear { SectionOrderStore.save(SectionOrderStore.profileKey, profileOrder) }
         }
         .sheet(isPresented: $showUsageGuide) {
@@ -281,7 +302,7 @@ struct ProfileView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
-                            Text(auth.user?.nickname ?? (auth.isLoggedIn ? "网易云已登录" : "免登录 · 点击登录"))
+                            Text(auth.user?.nickname ?? (auth.isLoggedIn ? "网易云音乐已登录" : "免登录 · 点击登录"))
                                 .font(BeansFont.appFont(20, .bold))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
@@ -320,7 +341,7 @@ struct ProfileView: View {
     private var platformStatusRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             if platformPrefs.isEnabled(SearchProvider.netease), auth.isLoggedIn {
-                platformChip(imageName: "BrandNetease", name: "网易云", status: auth.user?.nickname ?? "已登录", badge: auth.user?.vipBadge)
+                platformChip(imageName: "BrandNetease", name: "网易云音乐", status: auth.user?.nickname ?? "已登录", badge: auth.user?.vipBadge)
             }
             if platformPrefs.isEnabled(SearchProvider.qq), qqAuth.isLoggedIn {
                 platformChip(imageName: "BrandQQ", name: "QQ 音乐", status: qqAuth.nickname.isEmpty ? "已登录" : qqAuth.nickname, badge: qqAuth.vipBadge)
@@ -707,6 +728,108 @@ struct ProfileView: View {
         .buttonStyle(GlassPressButtonStyle(scale: 0.98))
         .beansCardShadow(radius: 9, y: 3)
     }
+
+    /// 我的页底部赞助入口与赞助排行榜
+    private var donationCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    donationExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "heart.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color.beansAmber)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("自愿赞助")
+                            .font(BeansFont.appFont(16, .bold))
+                            .foregroundStyle(Color.beansLabel)
+                        Text(donationExpanded ? "点击收起赞助信息" : "点击展开赞助信息")
+                            .font(BeansFont.appFont(11))
+                            .foregroundStyle(Color.beansComment)
+                    }
+                    Spacer()
+                    Image(systemName: donationExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.beansComment)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if donationExpanded {
+                Image("DonationQR")
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 300)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.beansComment.opacity(0.14), lineWidth: 0.8)
+                }
+
+                Text("虽然没有服务器运营成本，但是软件本身使用AI构建，需要消耗大量token，音源接口也由本人购买，本身就会有些压力，因为软件本身公益所以自愿赞助，感谢各位的喜欢")
+                .font(BeansFont.appFont(13))
+                .foregroundStyle(Color.beansLabel)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("赞助人员")
+                        .font(BeansFont.appFont(15, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                    Spacer()
+                    Text("按金额排序")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+
+                ForEach(Self.donors.indices, id: \.self) { index in
+                    let donor = Self.donors[index]
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(BeansFont.appFont(13, .bold))
+                            .foregroundStyle(index == 0 ? Color.beansAmber : Color.beansComment)
+                            .frame(width: 24, height: 24)
+                            .background(
+                                (index == 0 ? Color.beansAmber : Color.beansComment).opacity(index == 0 ? 0.16 : 0.08),
+                                in: Circle()
+                            )
+                        Text(donor.name)
+                            .font(BeansFont.appFont(13, .medium))
+                            .foregroundStyle(Color.beansLabel)
+                        Spacer()
+                        Text(String(format: "¥ %.2f", donor.amount))
+                            .font(BeansFont.appFont(13, .semibold))
+                            .foregroundStyle(index == 0 ? Color.beansAmber : Color.beansLabel)
+                    }
+                    if index < Self.donors.count - 1 {
+                        Divider().overlay(Color.beansComment.opacity(0.12))
+                    }
+                }
+                }
+            }
+        }
+        .padding(16)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
+    }
+
+    private struct Donor {
+        let name: String
+        let amount: Double
+    }
+
+    private static let donors: [Donor] = [
+        Donor(name: "WeChat", amount: 26.66),
+        Donor(name: "Aert", amount: 8.88),
+        Donor(name: "wxx", amount: 5),
+        Donor(name: "！", amount: 3),
+    ]
 }
 
 // MARK: - 交流群二维码
@@ -1000,12 +1123,18 @@ struct SettingsView: View {
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = true
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @AppStorage("beans.labelColorHex") private var labelColorHex = ""
+    @AppStorage("beans.homeGreetingText") private var homeGreetingText = ""
+    @AppStorage("beans.homeGreetingSize") private var homeGreetingSize = 30.0
+    @AppStorage("beans.homeGreetingHeight") private var homeGreetingHeight = 0.0
+    @AppStorage("beans.homeGreetingColorHex") private var homeGreetingColorHex = ""
+    @AppStorage("beans.homeHideUsername") private var homeHideUsername = false
+    @AppStorage("beans.homeHeaderHideSort") private var homeHeaderHideSort = false
+    @AppStorage("beans.homeHeaderHideRefresh") private var homeHeaderHideRefresh = true
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
     @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
-    @State private var showSourceImporter = false
 
-    private var importedSourceCount: Int {
-        sourceStore.customSources.count + sourceStore.lxScripts.count
+    private var presetSourceCount: Int {
+        sourceStore.presetSources.count
     }
 
     @State private var appearanceExpanded = false
@@ -1051,6 +1180,8 @@ struct SettingsView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .padding(.bottom, 40)
+                    .frame(maxWidth: 860)
+                    .frame(maxWidth: .infinity)
                 }
                 .beansScrollIndicatorsHidden()
             }
@@ -1077,9 +1208,11 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showChangelog) {
             ChangelogListView()
+                .environmentObject(theme)
         }
         .sheet(isPresented: $showUsageGuide) {
             UsageGuideSheet()
+                .environmentObject(theme)
         }
         .fileExporter(
             isPresented: $showExportBackup,
@@ -1098,9 +1231,7 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showLogViewer) {
             LogViewerSheet(importedText: nil)
-        }
-        .sheet(isPresented: $showSourceImporter) {
-            ThirdPartySourceImportSheet()
+                .environmentObject(theme)
         }
         .fullScreenCover(isPresented: $showRestorePicker) {
             BackupDocumentPicker { url in
@@ -1250,9 +1381,11 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
-                legacyTabBarSettings
+                if #unavailable(iOS 26) {
+                    legacyTabBarSettings
 
-                Divider().overlay(Color.beansComment.opacity(0.15))
+                    Divider().overlay(Color.beansComment.opacity(0.15))
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -1507,6 +1640,66 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "text.badge.star")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        Text("主页问候文字")
+                            .font(BeansFont.appFont(15))
+                            .foregroundStyle(Color.beansLabel)
+                        Spacer()
+                        ColorPicker("", selection: Binding(
+                            get: { Color(hex: homeGreetingColorHex) ?? Color.beansLabel },
+                            set: { homeGreetingColorHex = $0.hexString }
+                        ), supportsOpacity: false)
+                        .labelsHidden()
+                    }
+                    TextEditor(text: $homeGreetingText)
+                        .font(BeansFont.appFont(15))
+                        .frame(minHeight: 88, maxHeight: 180)
+                        .padding(6)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay {
+                            if homeGreetingText.isEmpty {
+                                Text("留空自动显示早上好/下午好/晚上好")
+                                    .font(BeansFont.appFont(13))
+                                    .foregroundStyle(Color.beansComment.opacity(0.8))
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 14)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("文字大小")
+                            Spacer()
+                            Text("\(Int(homeGreetingSize))")
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Slider(value: $homeGreetingSize, in: 20...64, step: 1)
+                        HStack {
+                            Text("标题区高度")
+                            Spacer()
+                            Text(homeGreetingHeight <= 0 ? "自动" : "\(Int(homeGreetingHeight))")
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Slider(value: $homeGreetingHeight, in: 0...260, step: 1)
+                    }
+                    .font(BeansFont.appFont(12))
+                    .foregroundStyle(Color.beansLabel)
+                    Toggle("隐藏主页用户名", isOn: $homeHideUsername)
+                        .font(BeansFont.appFont(13))
+                    Toggle("隐藏所有界面排序按钮", isOn: $homeHeaderHideSort)
+                        .font(BeansFont.appFont(13))
+                    Toggle("隐藏主页刷新按钮", isOn: $homeHeaderHideRefresh)
+                        .font(BeansFont.appFont(13))
+                }
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
                 HStack {
                     Image(systemName: "textformat")
                         .font(.system(size: 14))
@@ -1647,24 +1840,28 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
-                Toggle(isOn: $enableHighRefresh) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "speedometer")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.beansAmber)
-                            .frame(width: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("高刷新动效")
-                                .font(BeansFont.appFont(15))
-                                .foregroundStyle(Color.beansLabel)
-                            Text("默认开启；允许系统高刷动画，不再常驻空转刷新")
-                                .font(BeansFont.appFont(11))
-                                .foregroundStyle(Color.beansComment)
-                        }
+                HStack(spacing: 12) {
+                    Image(systemName: "speedometer")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("120Hz 高刷新")
+                            .font(BeansFont.appFont(15))
+                            .foregroundStyle(Color.beansLabel)
+                        Text("已强制开启；用于修复我的、设置和播放器页面最高只有 60Hz 的问题")
+                            .font(BeansFont.appFont(11))
+                            .foregroundStyle(Color.beansComment)
                     }
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Color.beansAmber)
                 }
-                .toggleStyle(.switch)
-                .tint(Color.beansAmber)
+                .onAppear {
+                    enableHighRefresh = true
+                    HighRefreshKeeper.shared.configure(enabled: true)
+                }
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
@@ -1707,32 +1904,26 @@ struct SettingsView: View {
                 .tint(Color.beansAmber)
 
                 HStack(spacing: 10) {
-                    Button {
-                        BeansHaptics.tap()
-                        showSourceImporter = true
-                    } label: {
-                        Label("导入音源", systemImage: "square.and.arrow.down")
-                            .font(BeansFont.appFont(13, .semibold))
-                            .foregroundStyle(Color.beansAmber)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(.ultraThinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                    Text("内置音源预设")
+                        .font(BeansFont.appFont(13, .semibold))
+                        .foregroundStyle(Color.beansLabel)
                     Spacer()
-                    Text(importedSourceCount == 0 ? "尚未导入" : "\(importedSourceCount) 个")
+                    Text("\(presetSourceCount) 个")
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }
 
-                ForEach(sourceStore.customSources) { source in
+                ForEach(sourceStore.presetSources) { source in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(source.name)
                                 .font(BeansFont.appFont(13, .medium))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
-                            Text(source.headers["source"]?.uppercased() ?? source.kind)
+                            Text("内置预设 · \(source.kind.replacingOccurrences(of: "paid-", with: "").uppercased())")
                                 .font(BeansFont.appFont(10))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1740,68 +1931,7 @@ struct SettingsView: View {
                         Toggle("", isOn: sourceEnabledBinding(source.id))
                             .labelsHidden()
                             .tint(Color.beansAmber)
-                        Button {
-                            sourceStore.remove(source)
-                            BeansHaptics.tap()
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.red)
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除音源")
                     }
-                }
-
-                ForEach(sourceStore.lxScripts) { source in
-                    HStack(spacing: 10) {
-                        Image(systemName: "curlybraces.square.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.beansAmber)
-                            .frame(width: 28, height: 28)
-                            .background(Color.beansGlassFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(source.name)
-                                .font(BeansFont.appFont(13, .medium))
-                                .foregroundStyle(Color.beansLabel)
-                                .lineLimit(1)
-                            Text("LX JavaScript 音源")
-                                .font(BeansFont.appFont(10))
-                                .foregroundStyle(Color.beansComment)
-                        }
-                        Spacer()
-                        Button {
-                            sourceStore.removeLxScript(source)
-                            BeansHaptics.tap()
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.red)
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除 LX 音源")
-                    }
-                }
-
-                HStack(spacing: 10) {
-                    Button {
-                        BeansHaptics.tap()
-                        showSourceImporter = true
-                    } label: {
-                        Label("导入 LX 脚本", systemImage: "curlybraces.square")
-                            .font(BeansFont.appFont(13, .semibold))
-                            .foregroundStyle(Color.beansAmber)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(.ultraThinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Text("LX 脚本在官方与导入音源都未命中时兜底")
-                        .font(BeansFont.appFont(11))
-                        .foregroundStyle(Color.beansComment)
                 }
 
             }
@@ -1817,10 +1947,10 @@ struct SettingsView: View {
 
     private func sourceEnabledBinding(_ id: String) -> Binding<Bool> {
         Binding(
-            get: { sourceStore.customSources.first(where: { $0.id == id })?.enabled ?? false },
+            get: { sourceStore.presetSources.first(where: { $0.id == id })?.enabled ?? false },
             set: { value in
-                guard let index = sourceStore.customSources.firstIndex(where: { $0.id == id }) else { return }
-                sourceStore.customSources[index].enabled = value
+                guard let index = sourceStore.presetSources.firstIndex(where: { $0.id == id }) else { return }
+                sourceStore.presetSources[index].enabled = value
             }
         )
     }
